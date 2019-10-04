@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #include <afina/Storage.h>
 
@@ -21,7 +22,11 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        while (_lru_tail && _lru_tail->prev) {
+          _lru_tail = _lru_tail->prev;
+          _lru_tail->next.reset();
+        }
+        _lru_head.reset();
     }
 
     // Implements Afina::Storage interface
@@ -44,7 +49,7 @@ private:
     using lru_node = struct lru_node {
         std::string key;
         std::string value;
-        std::unique_ptr<lru_node> prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
     };
 
@@ -56,10 +61,13 @@ private:
     // element that wasn't used for longest time.
     //
     // List owns all nodes
-    std::unique_ptr<lru_node> _lru_head;
+    std::unique_ptr<lru_node> _lru_head = NULL;
+    lru_node *_lru_tail = NULL;
+
+    std::size_t size = 0;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
 };
 
 } // namespace Backend
