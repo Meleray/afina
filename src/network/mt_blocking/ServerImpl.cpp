@@ -79,6 +79,7 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 
 // See Server.h
 void ServerImpl::Stop() {
+    std::lock_guard<std::mutex> run(is_running);
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
 }
@@ -119,7 +120,6 @@ void ServerImpl::OnRun() {
             }
             _logger->debug("Accepted connection on descriptor {} (host={}, port={})\n", client_socket, host, port);
         }
-
         // Configure read timeout
         {
             struct timeval tv;
@@ -127,22 +127,24 @@ void ServerImpl::OnRun() {
             tv.tv_usec = 0;
             setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
         }
-
         // TODO: Start new thread and process data from/to connection
-        if (curr_workers < max_workers) {
-          ++curr_workers;
-          std::thread(&ServerImpl::Worker, this, client_socket).detach();
-          lock.lock();
-          sockets.push_back(client_socket);
-          lock.unlock();
-        } else {
-          _logger->debug("Not enough treads");
-          close(client_socket);
+        {
+          std::lock_guard<std::mutex> run(is_running);
+          if (curr_workers < max_workers) {
+            ++curr_workers;
+            std::thread(&ServerImpl::Worker, this, client_socket).detach();
+            {
+              std::lock_guard<std::mutex> lck(lock);
+              sockets.push_back(client_socket);
+            }
+          } else {
+            _logger->debug("Not enough treads");
+            close(client_socket);
+          }
         }
-    }
-
-    // Cleanup on exit...
-    _logger->warn("Network stopped");
+      }
+      // Cleanup on exit...
+      _logger->warn("Network stopped");
 }
 
 void ServerImpl::Worker(int client_socket)
@@ -240,13 +242,13 @@ void ServerImpl::Worker(int client_socket)
   command_to_execute.reset();
   argument_for_command.resize(0);
   parser.Reset();
-
-  lock.lock();
-  std::remove(sockets.begin(), sockets.end(), client_socket);
-  lock.unlock();
+  {
+    std::lock_guard<std::mutex> lck(lock);
+    std::remove(sockets.begin(), sockets.end(), client_socket);
+  }
   --curr_workers;
   if (!curr_workers) {
-    ended.notify_one();
+    ended.notify_all();
   }
 }
 

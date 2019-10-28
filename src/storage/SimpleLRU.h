@@ -68,6 +68,9 @@ private:
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    void Tohead(lru_node &node);
+    void Free_space();
+    void Create_node(const std::string &key, const std::string &value);
 };
 
 } // namespace Backend

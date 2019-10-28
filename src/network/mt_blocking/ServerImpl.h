@@ -59,6 +59,7 @@ private:
     std::mutex lock;
     std::mutex stop;
     std::condition_variable ended;
+    std::mutex is_running;
 };
 
 } // namespace MTblocking
