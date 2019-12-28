@@ -1,5 +1,5 @@
-#ifndef AFINA_NETWORK_ST_NONBLOCKING_CONNECTION_H
-#define AFINA_NETWORK_ST_NONBLOCKING_CONNECTION_H
+#ifndef AFINA_NETWORK_MT_NONBLOCKING_CONNECTION_H
+#define AFINA_NETWORK_MT_NONBLOCKING_CONNECTION_H
 
 #include <cstring>
 #include <sys/epoll.h>
@@ -58,8 +58,8 @@ private:
     std::atomic<bool> close;
 };
 
-} // namespace STnonblock
+} // namespace MTnonblock
 } // namespace Network
 } // namespace Afina
 
-#endif // AFINA_NETWORK_ST_NONBLOCKING_CONNECTION_H
+#endif // AFINA_NETWORK_MT_NONBLOCKING_CONNECTION_H

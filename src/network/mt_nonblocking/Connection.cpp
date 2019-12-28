@@ -171,6 +171,6 @@ void Connection::DoWrite() {
     }
 }
 
-} // namespace STnonblock
+} // namespace MTnonblock
 } // namespace Network
 } // namespace Afina
