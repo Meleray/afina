@@ -3,8 +3,11 @@
 
 #include <thread>
 #include <vector>
-
+#include <mutex>
+#include <set>
 #include <afina/network/Server.h>
+#include "Connection.h"
+#include <condition_variable>
 
 namespace spdlog {
 class logger;
@@ -63,6 +66,11 @@ private:
 
     // threads serving read/write requests
     std::vector<Worker> _workers;
+    std::mutex mut;
+    std::set<Connection*> connections;
+    int num_acceptors;
+    int stopped;
+    std::condition_variable joining;
 };
 
 } // namespace MTnonblock

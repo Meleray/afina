@@ -39,7 +39,8 @@ ServerImpl::~ServerImpl() {}
 void ServerImpl::Start(uint16_t port, uint32_t n_acceptors, uint32_t n_workers) {
     _logger = pLogging->select("network");
     _logger->info("Start mt_nonblocking network service");
-
+    num_acceptors = n_acceptors;
+    stopped = 0;
     sigset_t sig_mask;
     sigemptyset(&sig_mask);
     sigaddset(&sig_mask, SIGPIPE);
@@ -119,16 +120,31 @@ void ServerImpl::Stop() {
     if (eventfd_write(_event_fd, 1)) {
         throw std::runtime_error("Failed to wakeup workers");
     }
+    std::set<Connection*>::iterator it;
+    for (it = connections.begin(); it != connections.end(); ++it) {
+        Connection* curr = (*it);
+        close(curr->_socket);
+    }
+    connections.clear();
+    {
+      std::unique_lock<std::mutex> lock(mut);
+      shutdown(_server_socket, SHUT_RDWR);
+    }
 }
 
 // See Server.h
 void ServerImpl::Join() {
-    for (auto &t : _acceptors) {
-        t.join();
-    }
-
-    for (auto &w : _workers) {
-        w.Join();
+    {
+      std::unique_lock<std::mutex> lock(mut);
+      while (num_acceptors) {
+        joining.wait(lock);
+      }
+      for (auto &t : _acceptors) {
+          t.join();
+      }
+      for (auto &w : _workers) {
+          w.Join();
+      }
     }
 }
 
@@ -193,7 +209,7 @@ void ServerImpl::OnRun() {
                 }
 
                 // Register the new FD to be monitored by epoll.
-                Connection *pc = new Connection(infd);
+                Connection *pc = new Connection(infd, pStorage);
                 if (pc == nullptr) {
                     throw std::runtime_error("Failed to allocate connection");
                 }
@@ -201,18 +217,29 @@ void ServerImpl::OnRun() {
                 // Register connection in worker's epoll
                 pc->Start();
                 if (pc->isAlive()) {
-                    pc->_event.events |= EPOLLONESHOT;
+                    pc->_event.events |= EPOLLONESHOT | EPOLLET;
                     int epoll_ctl_retval;
                     if ((epoll_ctl_retval = epoll_ctl(_data_epoll_fd, EPOLL_CTL_ADD, pc->_socket, &pc->_event))) {
                         _logger->debug("epoll_ctl failed during connection register in workers'epoll: error {}", epoll_ctl_retval);
                         pc->OnError();
+                        close(pc->_socket);
                         delete pc;
+                    } else {
+                      std::lock_guard<std::mutex> lock(mut);
+                      connections.insert(pc);
                     }
                 }
             }
         }
     }
     _logger->warn("Acceptor stopped");
+    {
+      std::unique_lock<std::mutex> lock(mut);
+      --num_acceptors;
+      if (!num_acceptors) {
+        joining.notify_all();
+      }
+    }
 }
 
 } // namespace MTnonblock
