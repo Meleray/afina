@@ -55,7 +55,6 @@ private:
     int readed_bytes = 0;
     char client_buffer[4096];
     std::atomic<bool> good;
-    std::atomic<bool> close;
 };
 
 } // namespace MTnonblock

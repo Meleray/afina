@@ -12,8 +12,6 @@ void Connection::Start() {
   std::lock_guard<std::mutex> lock(mut);
   _event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
   good.store(true);
-  close.store(false);
-  _event.data.fd = _socket;
   argument_for_command.resize(0);
   parser.Reset();
   arg_remains = 0;
@@ -34,8 +32,8 @@ void Connection::OnError() {
 
 // See Connection.h
 void Connection::OnClose() {
-  if (!feedbacks.size()) {
-    good.store(false);
+  good.store(false);
+  if (feedbacks.empty()) {
     shutdown(_socket, SHUT_RDWR);
     command_to_execute.reset();
     argument_for_command.resize(0);
@@ -47,7 +45,6 @@ void Connection::OnClose() {
     command_to_execute.reset();
     argument_for_command.resize(0);
     parser.Reset();
-    close.store(true);
   }
 }
 
@@ -139,8 +136,9 @@ void Connection::DoWrite() {
     return;
   }
   try {
-        iovec dat[feedbacks.size()];
-        for (int i = 0; i < feedbacks.size(); ++i) {
+        size_t siz = feedbacks.size() > 32 ? 32 : feedbacks.size();
+        iovec dat[siz];
+        for (int i = 0; i < siz; ++i) {
             dat[i].iov_len = feedbacks[i].size();
             dat[i].iov_base = &(feedbacks[i][0]);
         }
@@ -157,10 +155,10 @@ void Connection::DoWrite() {
               ++it;
           }
           feedbacks.erase(feedbacks.begin(), it);
-          offs = wrote;
+          offs += num;
         }
         if (feedbacks.empty()) {
-          if (close.load()) {
+          if (!good.load()) {
             OnClose();
           } else {
             _event.events = EPOLLIN;
