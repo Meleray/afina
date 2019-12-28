@@ -12,9 +12,10 @@
 namespace Afina {
 namespace Concurrency {
 
-/**
- * # Thread pool
- */
+class Executor;
+
+void perform(Executor *executor);
+
 class Executor {
     enum class State {
         // Threadpool is fully operational, tasks could be added and get executed
@@ -28,8 +29,17 @@ class Executor {
         kStopped
     };
 
-    Executor(std::string name, int size);
-    ~Executor();
+  public:
+      Executor(std::string name, int sz, int lwtm, int hwtm, int time) {
+          max_queue_size = sz;
+          hight_watermark = hwtm;
+          low_watermark = lwtm;
+          idle_time = time;
+      };
+
+      ~Executor() {};
+
+    void Start();
 
     /**
      * Signal thread pool to stop, it will stop accepting new jobs and close threads just after each become
@@ -51,12 +61,15 @@ class Executor {
         auto exec = std::bind(std::forward<F>(func), std::forward<Types>(args)...);
 
         std::unique_lock<std::mutex> lock(this->mutex);
-        if (state != State::kRun) {
+        if (tasks.size() >= max_queue_size || state != State::kRun) {
             return false;
         }
 
         // Enqueue new task
         tasks.push_back(exec);
+        if (num_threads == 0 && threads.size() < hight_watermark) {
+            threads.push_back(std::thread(&perform, this));
+        }
         empty_condition.notify_one();
         return true;
     }
@@ -97,6 +110,13 @@ private:
      * Flag to stop bg threads
      */
     State state;
+
+    int low_watermark;
+    int hight_watermark;
+    int max_queue_size;
+    int idle_time;
+    int num_threads;
+    std::condition_variable stopped;
 };
 
 } // namespace Concurrency

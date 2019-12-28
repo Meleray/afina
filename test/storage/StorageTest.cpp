@@ -24,7 +24,6 @@ TEST(StorageTest, PutGet) {
 
     EXPECT_TRUE(storage.Put("KEY1", "val1"));
     EXPECT_TRUE(storage.Put("KEY2", "val2"));
-
     std::string value;
     EXPECT_TRUE(storage.Get("KEY1", value));
     EXPECT_TRUE(value == "val1");
