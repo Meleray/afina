@@ -81,6 +81,9 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     std::lock_guard<std::mutex> run(is_running);
     running.store(false);
+    for (auto socket: sockets) {
+      shutdown(socket, SHUT_RDWR);
+    }
     shutdown(_server_socket, SHUT_RDWR);
 }
 
@@ -130,7 +133,7 @@ void ServerImpl::OnRun() {
         // TODO: Start new thread and process data from/to connection
         {
           std::lock_guard<std::mutex> run(is_running);
-          if (curr_workers < max_workers) {
+          if (running.load() && curr_workers < max_workers) {
             ++curr_workers;
             std::thread(&ServerImpl::Worker, this, client_socket).detach();
             {
@@ -228,15 +231,17 @@ void ServerImpl::Worker(int client_socket)
 
       if (readed_bytes == 0) {
           _logger->debug("Connection closed");
+          close(client_socket);
       } else {
           throw std::runtime_error(std::string(strerror(errno)));
+          close(client_socket);
       }
   } catch (std::runtime_error &ex) {
       _logger->error("Failed to process connection on descriptor {}: {}", client_socket, ex.what());
+      close(client_socket);
   }
 
   // We are done with this connection
-  close(client_socket);
 
   // Prepare for the next command: just in case if connection was closed in the middle of executing something
   command_to_execute.reset();
