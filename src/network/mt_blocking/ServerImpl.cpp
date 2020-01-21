@@ -81,10 +81,10 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     std::lock_guard<std::mutex> run(is_running);
     running.store(false);
-    for (auto socket: sockets) {
-      shutdown(socket, SHUT_RDWR);
-    }
     shutdown(_server_socket, SHUT_RDWR);
+    for (auto socket: sockets) {
+      shutdown(socket, SHUT_RD);
+    }
 }
 
 // See Server.h
