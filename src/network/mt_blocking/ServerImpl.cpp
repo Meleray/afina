@@ -79,7 +79,6 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 
 // See Server.h
 void ServerImpl::Stop() {
-    std::lock_guard<std::mutex> run(is_running);
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
     for (auto socket: sockets) {
@@ -89,7 +88,7 @@ void ServerImpl::Stop() {
 
 // See Server.h
 void ServerImpl::Join() {
-    std::unique_lock<std::mutex> ending(stop);
+    std::unique_lock<std::mutex> ending(lock);
     while (curr_workers != 0) {
       ended.wait(ending);
     }
@@ -132,14 +131,11 @@ void ServerImpl::OnRun() {
         }
         // TODO: Start new thread and process data from/to connection
         {
-          std::lock_guard<std::mutex> run(is_running);
+          std::lock_guard<std::mutex> lck(lock);
           if (running.load() && curr_workers < max_workers) {
             ++curr_workers;
             std::thread(&ServerImpl::Worker, this, client_socket).detach();
-            {
-              std::lock_guard<std::mutex> lck(lock);
-              sockets.push_back(client_socket);
-            }
+            sockets.push_back(client_socket);
           } else {
             _logger->debug("Not enough treads");
             close(client_socket);
@@ -250,10 +246,10 @@ void ServerImpl::Worker(int client_socket)
   {
     std::lock_guard<std::mutex> lck(lock);
     std::remove(sockets.begin(), sockets.end(), client_socket);
-  }
-  --curr_workers;
-  if (!curr_workers) {
-    ended.notify_all();
+    --curr_workers;
+    if (!curr_workers) {
+      ended.notify_one();
+    }
   }
 }
 
