@@ -22,8 +22,8 @@ void Connection::Start() {
 
 // See Connection.h        good.store(true);
 void Connection::OnError() {
+  std::lock_guard<std::mutex> lock(mut);
   good.store(false);
-  shutdown(_socket, SHUT_RDWR);
   command_to_execute.reset();
   argument_for_command.resize(0);
   parser.Reset();
@@ -32,19 +32,13 @@ void Connection::OnError() {
 
 // See Connection.h
 void Connection::OnClose() {
+  std::lock_guard<std::mutex> lock(mut);
   good.store(false);
-  if (feedbacks.empty()) {
-    shutdown(_socket, SHUT_RDWR);
-    command_to_execute.reset();
-    argument_for_command.resize(0);
-    parser.Reset();
-    feedbacks.clear();
-  } else {
+  command_to_execute.reset();
+  argument_for_command.resize(0);
+  parser.Reset();
+  if (!feedbacks.empty()) {
     _event.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
-    shutdown(_socket, SHUT_RD);
-    command_to_execute.reset();
-    argument_for_command.resize(0);
-    parser.Reset();
   }
 }
 
@@ -155,7 +149,7 @@ void Connection::DoWrite() {
               ++it;
           }
           feedbacks.erase(feedbacks.begin(), it);
-          offs += num;
+          offs = wrote;
         }
         if (feedbacks.empty()) {
           if (!good.load()) {
