@@ -53,11 +53,10 @@ private:
     // Thread to run network on
     std::thread _thread;
     void Worker(int socket);
-    std::atomic<int> curr_workers;
+    int curr_workers;
     unsigned int max_workers;
     std::vector<int> sockets;
     std::mutex lock;
-    std::mutex stop;
     std::condition_variable ended;
 };
 
